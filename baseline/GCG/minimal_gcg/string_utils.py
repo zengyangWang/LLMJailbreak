@@ -44,7 +44,12 @@ class SuffixManager:
         prompt = self.conv_template.get_prompt()
 
         encoding = self.tokenizer(prompt)
-        toks = encoding.input_ids
+
+        # `prompt` is returned at the end of this method.  Keep the tokenization
+        # that corresponds to this exact string so get_input_ids() does not
+        # tokenize the same prompt a second time.
+        full_prompt_toks = encoding.input_ids
+        toks = full_prompt_toks
 
         if self.conv_template.name == 'llama-2':
             self.conv_template.messages = []
@@ -134,14 +139,20 @@ class SuffixManager:
                     encoding.char_to_token(prompt.find(self.target) + len(self.target)) - 1
                 )
 
+        # Keep the tokens for the exact prompt returned above.  The local
+        # variable `toks` is overwritten while calculating the different slice
+        # boundaries, so use the separately preserved full-prompt tokens.
+        self._last_prompt_toks = full_prompt_toks
+
         self.conv_template.messages = []
 
         return prompt
     
     def get_input_ids(self, adv_string=None):
-        prompt = self.get_prompt(adv_string=adv_string)
-        toks = self.tokenizer(prompt).input_ids
-        input_ids = torch.tensor(toks[:self._target_slice.stop])
+        self.get_prompt(adv_string=adv_string)
+        input_ids = torch.tensor(
+            self._last_prompt_toks[:self._target_slice.stop],
+            dtype=torch.long,
+        )
 
         return input_ids
-
