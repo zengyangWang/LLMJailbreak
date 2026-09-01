@@ -1,0 +1,578 @@
+<p align="center"><img src="assets/framework-v6.png" alt="framework_"/></p>
+<div align="center">
+
+# <img src="assets/bag.png" style="height: 1em; vertical-align: middle;" />Bag of Tricks: Benchmarking of Jailbreak Attacks on LLMs
+
+</div>
+
+- [Bag of Tricks: Benchmarking of Jailbreak Attacks on LLMs](#bag-of-tricks-benchmarking-of-jailbreak-attacks-on-llms)
+  - [当前部署运行指南](#当前部署运行指南)
+  - [0. Overview](#0-overview)
+    - [Update](#update)
+  - [1. Quick Start](#1-quick-start)
+    - [1.1 Installation](#11-installation)
+    - [1.2 Preparation](#12-preparation)
+      - [1.2.1 OPENAI API Key](#121-openai-api-key)
+      - [1.2.2 Model Preparation](#122-model-preparation)
+      - [1.2.3 Step-by-step guide to obtain the output of model-level defense methods](#123-step-by-step-guide-to-obtain-the-output-of-model-level-defense-methods)
+    - [1.3 One-Click Run](#13-one-click-run)
+      - [1.3.1 Run different tricks](#131-run-different-tricks)
+      - [1.3.2 Run main experiments](#132-run-main-experiments)
+  - [2. Definition of Argument](#2-definition-of-argument)
+  - [3. Supported Methods](#3-supported-methods)
+    - [3.1 Attack Methods](#31-attack-methods)
+    - [3.2 Defense Methods](#32-defense-methods)
+  - [4. Analysis](#4-analysis)
+  - [5. Supported LLMs](#5-supported-llms)
+  - [6. Acknowledgement](#6-acknowledgement)
+
+## 0. Overview
+
+Although Large Language Models (LLMs) have demonstrated significant capabilities in executing complex tasks in a zero-shot manner, they are susceptible to jailbreak attacks and can be manipulated to produce harmful outputs. Recently, a growing body of research has categorized jailbreak attacks into token-level and prompt-level attacks. However, previous work primarily overlooks the diverse key factors of jailbreak attacks, with most studies concentrating on LLM vulnerabilities and lacking exploration of defense-enhanced LLMs. To address these issues, we evaluate the impact of various attack settings on LLM performance and provide a baseline benchmark for jailbreak attacks, encouraging the adoption of a standardized evaluation framework. Specifically, we evaluate the eight key factors of implementing jailbreak attacks on LLMs from both target-level and attack-level perspectives. We further conduct seven representative jailbreak attacks on six defense methods across two widely used datasets, encompassing approximately 354 experiments with about 55,000 GPU hours on A800-80G. Our experimental results highlight the need for standardized benchmarking to evaluate these attacks on defense-enhanced LLMs. 
+
+### Update
+
+1. **2024.08 Update1:** We support more LLMs including: Llama2, Llama3, Mistral, Qwen, Tulu, and Vicuna families. See all supported models and details [HERE](#5-supported-llms).
+
+2. **2024.08 Update2:** We add two new attack methods: [DrAttack](https://arxiv.org/abs/2402.16914) and [MultiJail](https://arxiv.org/abs/2310.06474). 
+   **DrAttack** is a new prompt-level jailbreak methods and need to preprocessing the data. We have provide the preprocessing results for datasets used in this repo. 
+   **MultiJail** (ICLR 2024) is a new type of jailbreak method that manually-create multilingual prompts to attack the LLMs. There are 10 languages supported in MultiJail, including: English, High-Resource Language (HRL) : Chines (zh), Italic (it), Vietnamese (vi); Medium-Resource Language (MRL): Arabic (ar), Korean (ko), Thai (th); Low-Resource Language (LRL): Bengali (bn), Swahili (sw), Javanese (jv).
+
+3. **2024.08 Update3:** We add a step-by-step guide to obtain the output of model-level defense methods. We provide the code to train the adversarial training model and safety training model. We also provide the code to run the RPO method to get the defense adversarial suffix. Please see the details in the [1.3.2 section](#123-step-by-step-guide-to-obtain-the-output-of-model-level-defense-methods). After the paper is public, we will also provide the pre-trained model in the official repository.
+
+4. **2024.08 Update4:** Recently, we noticed a new defense methods called [PrimeGuard](https://arxiv.org/pdf/2407.16318) which is presented in NextGenAISafety@ICML2024. This paper proposes a dynamic routing mechanism to detect different types of prompts and use in-context learning to prevent the jailbreak responses. We have added the PrimeGuard defense method in the codebase. However, in the original realization, PrimeGuard requires API LLM calls to construct the interaction environment. Therefore, you need to use this defense method in **multiple** GPUs environment and start the local server first. We will continue to work on the optimization of the PrimeGuard defense method.
+5. **2024.10 Update:** We are working on new version of **JailTrickBench** which will be released in the future. The new version will include more attack methods, defense methods, more tricks and will support more LLMs. We will also provide the pre-trained models and datasets in the new version. Stay tuned!
+
+🌟 **If you find this resource helpful, please consider starring this repository and citing our NeurIPS'24 paper:**
+
+```
+@inproceedings{NEURIPS2024_xu2024bag,
+ author={Xu, Zhao and Liu, Fan and Liu, Hao},
+ booktitle = {Advances in Neural Information Processing Systems},
+ title = {Bag of Tricks: Benchmarking of Jailbreak Attacks on LLMs},
+ year = {2024}
+}
+
+@article{xu2024bag,
+  title={Bag of Tricks: Benchmarking of Jailbreak Attacks on LLMs},
+  author={Xu, Zhao and Liu, Fan and Liu, Hao},
+  journal={arXiv preprint arXiv:2406.09324},
+  year={2024}
+}
+
+@article{liu2024adversarial,
+  title={Adversarial tuning: Defending against jailbreak attacks for llms},
+  author={Liu, Fan and Xu, Zhao and Liu, Hao},
+  journal={arXiv preprint arXiv:2406.06622},
+  year={2024}
+}
+```
+
+
+## 当前部署运行指南
+
+### 1. 激活环境
+
+```bash
+cd /mnt/data/tangjiabao/LLMJailbreak
+source /mnt/data/tangjiabao/my_restored_env/bin/activate
+```
+
+建议为每次运行显式设置 GPU、Hugging Face 镜像和缓存目录：
+
+```bash
+export CUDA_VISIBLE_DEVICES=4,5
+export HF_ENDPOINT=https://hf-mirror.com
+export HF_HOME=/mnt/data/tangjiabao/huggingface_cache
+```
+
+### 2. 单独运行一个攻击方法
+
+下面以 AdvPrompter 为例。`--attack` 可替换为其他受支持的方法名。
+
+```bash
+python -u main.py \
+  --target_model_path ./llm_weights/vicuna-13b-v1.5 \
+  --attack AdvPrompter \
+  --instructions_path ./data/SeedData_short.xlsx \
+  --save_result_path ./exp_results/results/AdvPrompter \
+  --resume_exp \
+  --exp_name AdvPrompter
+```
+
+常用方法示例：
+
+```bash
+# GCG
+python -u main.py \
+  --target_model_path ./llm_weights/vicuna-13b-v1.5 \
+  --attack GCG \
+  --instructions_path ./data/SeedData_short.xlsx \
+  --save_result_path ./exp_results/results/GCG \
+  --resume_exp --exp_name GCG
+
+# DrAttack：BGE-M3 默认从 ./llm_weights/bge-m3 加载
+python -u main.py \
+  --target_model_path ./llm_weights/vicuna-13b-v1.5 \
+  --attack DrAttack \
+  --instructions_path ./data/SeedData_short.xlsx \
+  --save_result_path ./exp_results/results/DrAttack \
+  --resume_exp --exp_name DrAttack
+
+# TAP；PAIR 和 PAP 的命令结构相同，只需替换 --attack
+python -u main.py \
+  --target_model_path ./llm_weights/vicuna-13b-v1.5 \
+  --attack TAP \
+  --instructions_path ./data/SeedData_short.xlsx \
+  --save_result_path ./exp_results/results/TAP \
+  --resume_exp --exp_name TAP
+
+```
+
+调试时可以使用 `--sample_size 1`，并适当降低对应方法的迭代预算。查看所有参数：
+
+```bash
+python main.py -h
+```
+
+### 3. 启动 FastAPI 算法服务
+
+后台启动：
+
+```bash
+cd /mnt/data/tangjiabao/LLMJailbreak
+source /mnt/data/tangjiabao/my_restored_env/bin/activate
+
+nohup env \
+  CUDA_VISIBLE_DEVICES=4,5 \
+  HF_ENDPOINT=https://hf-mirror.com \
+  HF_HOME=/mnt/data/tangjiabao/huggingface_cache \
+  python -u server.py \
+  > server.log 2>&1 &
+
+echo $!
+```
+
+服务默认监听 `0.0.0.0:39002`。查看方法清单：
+
+```bash
+curl http://127.0.0.1:39002/attack_method_list
+```
+
+提交单个算法任务：
+
+```bash
+curl -X POST http://127.0.0.1:39002/attack_batch \
+  -H "Content-Type: application/json" \
+  -d '{"attack_method":"GCG","target_model":"vicuna","defense_type":"None_defense","exp_name":"api_gcg","tasks":[{"risk_id":1,"goal":"Describe the requested test task","target":"Sure, here is the requested description","language":"ENGLISH","is_public":false}],"config":{"gcg_attack_budget":2}}'
+```
+
+主要请求字段：
+
+- `attack_method`：单个方法名或方法名数组。
+- `target_model`：模型选择器，例如 `vicuna` 或 `llama`。
+- `tasks`：任务数组，每项包含 `risk_id`、`goal`，以及可选的 `target`、`language`、`is_public`。
+- `config`：算法参数覆盖项，字段名与 `initialize_args.py` 中的参数一致。
+
+接口为同步执行：模型加载和攻击未完成前，HTTP 请求会保持连接。建议调用方根据算法耗时设置足够长的超时时间，并避免并发提交多个高显存任务。
+
+
+---
+
+## 1. Quick Start
+
+### 1.1 Installation
+
+```bash
+git clone <Repo Link> or download the zip file from anonymous github
+cd ./Bag_of_Tricks_for_LLM_Jailbreaking-4E10/
+pip install -r requirements.txt
+```
+
+### 1.2 Preparation
+
+#### 1.2.1 OPENAI API Key
+
+There are several baselines that use GPT service in their method. And We also use GPT-4 based agent to evaluate the attack success rate. Please search and replace `YOUR_KEY_HERE` with your OpenAI API key in the following files: `./bag_of_tricks_for_llm_jailbreaking/GPTEvaluatorAgent/language_models.py`, `./bag_of_tricks_for_llm_jailbreaking/baseline/TAP/language_models.py`, `./bag_of_tricks_for_llm_jailbreaking/baseline/PAIR/language_models.py`, `./bag_of_tricks_for_llm_jailbreaking/baseline/GPTFuzz/gptfuzzer/llm/llm.py`, `./bag_of_tricks_for_llm_jailbreaking/baseline/AutoDAN/utils/opt_utils.py`.
+
+After setting the API key, you can run the tricks experiments with one-click scripts below.
+
+#### 1.2.2 Model Preparation
+
+To reproduce the main experiment results, you need to prepare the following models:
+
+- Attack Model:
+  - AdvPrompter: You need to train the AdvPrompter model to get the LoRA Adapter and merge the model. You can save the attack model to `"./models/attack/`.
+  - AmpleGCG: If you cannot load the huggingface model directly using the `AutoModelForCausalLM.from_pretrained()` function, you may need to download the attack model `osunlp/AmpleGCG-llama2-sourced-llama2-7b-chat` and `osunlp/AmpleGCG-llama2-sourced-vicuna-7b` from the Hugging Face first.
+- Defense Model:
+  - RPO: You need to run the RPO method from the original repository to get the defense adversarial suffix. We also provide the results we obtained.
+  - Advertorial Training: You need to train the adversarial training model to get the defense model. You can save the defense model to `"./models/defense/`. Due to the space limitation, we cannot provide the pre-trained model in anonymous repository. After the paper is public, we will provide the pre-trained model in the official repository.
+  - Safety Training: You need to train the safety training model to get the defense model. You can save the defense model to `"./models/defense/`. Due to the space limitation, we cannot provide the pre-trained model in anonymous repository. After the paper is public, we will provide the pre-trained model in the official repository.
+
+#### 1.2.3 Step-by-step guide to obtain the output of model-level defense methods
+
+1. **Adversarial Training:** You need to generate the adversarial data to train the model. In this repo, you can use any attack method in `baseline/` folder to generate the adversarial data. In our experiment, we use [GCG](baseline/GCG) to generate adversarial prompts, and use GPT-4 to generate safety response. We also provide the adversarial data sample we obtained in the `./defenses/data/AdversarialTraining/adv_training_data_sample.json` to help you better understand the whole process. You can use the adversarial data to train the adversarial training model. To fine-tune LLMs efficiently and easily, we recommend using the [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) tools. You can use the following command to fine-tune the model with the adversarial data:
+
+```bash
+# Dependence Installation
+conda create -n llama_factory python=3.10
+conda activate llama_factory
+cd defense/LLaMA-Factory/
+pip install -e .[metrics]
+
+# Fine-tune the model
+## We have provided the adversarial data in the `./defenses/data/AdversarialTraining/adv_training_data.json`. You can use the following command to fine-tune the model.
+cd defenses/LLaMA-Factory/my_scripts/bag_of_trick/
+bash adversarial_training_llama2.sh
+```
+
+If you want to train another LLM or train the model with your own adversarial data, remember to add your dataset in `LLaMA-Factory/data/dataset_info.json` and modify `YOUR_LLM_PATH`, `CHANGE_TO_YOUR_DATASET_NAME`, `YOUR_LLM_NAME` in the `adversarial_training_llama2.sh` script as follows:
+
+```bash
+# lora
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 accelerate launch \
+    --config_file ../../examples/accelerate/single_config.yaml \
+    ../../src/train.py \
+    --stage sft \
+    --do_train \
+    --model_name_or_path YOUR_LLM_PATH \ 
+    --dataset CHANGE_TO_YOUR_DATASET_NAME \
+    --dataset_dir ../../data \
+    --template llama2 \
+    --finetuning_type lora \
+    --lora_target q_proj,v_proj \
+    --output_dir ../../saves/bag_of_trick/LLaMA2-7B/lora/YOUR_LLM_NAME \
+    --overwrite_cache \
+    --overwrite_output_dir \
+    --cutoff_len 4096 \
+    --preprocessing_num_workers 32 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
+    --gradient_accumulation_steps 2 \
+    --lr_scheduler_type cosine \
+    --logging_steps 2 \
+    --warmup_steps 4 \
+    --save_steps 20 \
+    --eval_steps 20 \
+    --evaluation_strategy steps \
+    --load_best_model_at_end \
+    --learning_rate 5e-5 \
+    --num_train_epochs 8.0 \
+    --val_size 0.05 \
+    --ddp_timeout 180000000 \
+    --plot_loss \
+    --bf16 \
+
+
+
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 llamafactory-cli export \
+    --model_name_or_path YOUR_LLM_PATH \
+    --adapter_name_or_path .../../saves/bag_of_trick/LLaMA2-7B/lora/YOUR_LLM_NAME \
+    --template llama2 \
+    --finetuning_type lora \
+    --export_dir .../../saves/at_transfer/LLaMA2-7B/merged/YOUR_LLM_NAME \
+    --export_size 2 \
+    --export_device cpu \
+    --export_legacy_format False
+
+```
+
+2. **Safety Training:** You need to generate the safety data to train the model. For example, your can use GPT-4 to generate safe response to harmful prompts. We also provide the sample data for safety training we obtained in the `./defenses/data/SafetyTraining/safety_training_data_sample.json`. You can use the safety data to train the safety training model. If you have installed the LLaMA-Factory, you can use the following command to fine-tune the model with the safety data:
+
+```bash
+conda activate llama_factory
+cd defenses/LLaMA-Factory/my_scripts/bag_of_trick/
+bash safety_training_llama2.sh
+```
+
+3. **Unlearning:** For unlearning, you can make use of the output from the adversarial training step, i.e., the adversarial data. You can directly use the output file of `GCG` attack and perform unlearning. We also provide the sample data for unlearning we obtained in the `./defenses/data/Unlearning/unlearning_data_sample.json`. You can use the unlearning data to train the unlearning model. You can use the following command to unlearn the model with the unlearning data:
+
+```bash
+cd defenses/Unlearning/
+python unlearning.py --model_name YOUR_LLM_NAME --data_path ./data/Unlearning/unlearning_data_sample.json --model_save_dir ./models/defense/Unlearning/
+```
+
+4. **RPO:** Although RPO is not a model-level defense method, it can be used to generate the defense adversarial suffix. We provide the code to run the RPO method to get the defense adversarial suffix. You can use the following command to get the defense adversarial suffix on llama2:
+
+```bash
+cd defenses/RPO/
+python rpo.py --model_path meta-llama/Llama-2-7b-chat-hf --instructions_path ./data/RPO/harmful_bench_train.json --template_name llama2
+```
+
+### 1.3 One-Click Run
+
+#### 1.3.1 Run different tricks
+
+For each trick, we provide a example script. You can run the script to reproduce the results in the paper. The script is in the `./scripts/` folder. You can run the script by the following command:
+
+```bash
+# 1. Attack Budget
+bash scripts/1_trick_atk_budget_gcg.sh
+bash scripts/1_trick_atk_budget_pair.sh
+
+# 2. Attack Ability
+bash scripts/2_trick_atk_ability_pair.sh
+
+# 3. Attack Suffix Length
+bash scripts/3_trick_atk_suffix_length.sh
+
+# 4. Attack Intension
+bash scripts/4_trick_atk_intension_autodan.sh
+bash scripts/4_trick_atk_intension_pair.sh
+
+# 5. Target Model Size
+bash scripts/5_trick_target_size_autodan.sh
+bash scripts/5_trick_target_size_pair.sh
+
+# 6. Target Safety Fine-tuning Alignment
+bash scripts/6_trick_target_align_autodan.sh
+bash scripts/6_trick_target_align_pair.sh
+
+# 7. Target System Prompt
+bash scripts/7_trick_target_system_autodan.sh
+bash scripts/7_trick_target_system_pair.sh
+
+# 8. Target Template Type
+bash scripts/8_trick_target_template_autodan.sh
+bash scripts/8_trick_target_template_pair.sh
+```
+
+**Note**: As some baselines require a long time to run, we provide a feature to run the experiment in parallel (We use 50 A800 GPUs to accelerate the experiments) You can set the `--data_split` and `--data_split_total_num` to run the experiment in parallel. For example, you can set `--data_split_total_num 2` and `--data_split_idx 0` in the script to run the first half of the data, and set `--data_split_total_num 2` and `--data_split_idx 1` in the script to run the second half of the data. After all data is finished, the program will automatically merge the results.
+
+#### 1.3.2 Run main experiments
+
+```bash
+# Example: Use vicuna as target model
+# We provide 98 scripts for the main experiments (7 attacks * 7 defenses * 2 datasets). For No defense method, you can run the script by the following command:
+
+# 1. Run AutoDAN attack on No defense
+bash scripts/main_vicuna/1_data1_None_defense.sh
+
+# 2. Run PAIR attack on No defense
+bash scripts/main_vicuna/2_data1_None_defense.sh
+
+# 3. Run TAP attack on No defense
+bash scripts/main_vicuna/3_data1_None_defense.sh
+
+# 4. Run GPTFuzz attack on No defense
+bash scripts/main_vicuna/4_data1_None_defense.sh
+
+# 5. Run GCG attack on No defense
+bash scripts/main_vicuna/5_data1_None_defense.sh
+
+# 6. Run AdvPrompter attack on No defense
+bash scripts/main_vicuna/6_data1_None_defense.sh
+
+# 7. Run AmpleGCG attack on No defense
+bash scripts/main_vicuna/7_data1_None_defense.sh
+```
+
+**Note1**: As some baselines require a long time to run, we provide a feature to run the experiment in parallel (We use 50 A800 GPUs to accelerate the experiments) You can set the `--data_split` and `--data_split_total_num` to run the experiment in parallel. For example, you can set `--data_split_total_num 2` and `--data_split_idx 0` in the script to run the first half of the data, and set `--data_split_total_num 2` and `--data_split_idx 1` in the script to run the second half of the data. After all data is finished, the program will automatically merge the results.
+
+**Note2**: We provide a notebook to generate the scripts for the main experiments. You can run the notebook `./generate_scripts.ipynb` to generate the scripts for the main experiments. You may also write you own script to generate the scripts for the tricks experiments.
+
+## 2. Definition of Argument
+
+For detailed arguments and options, please refer to the `initialie_args.py` or help message of `main.py`.
+
+```bash
+python main.py -h
+```
+
+## 3. Supported Methods
+
+### 3.1 Attack Methods
+
+- [AutoDAN][R-AutoDAN]
+  ```bash
+  python -u main.py \
+    --target_model_path lmsys/vicuna-13b-v1.5 \
+    --defense_type None_defense \
+    --attack AutoDAN \
+    --instructions_path ./data/harmful_bench_50.csv \
+    --save_result_path ./exp_results/main_vicuna/ \
+    --agent_evaluation \
+    --resume_exp \
+    --agent_recheck \
+    --exp_name main_vicuna_none_defense
+  ```
+- [PAIR][R-PAIR]
+  ```bash
+  python -u main.py \
+    --target_model_path lmsys/vicuna-13b-v1.5 \
+    --defense_type None_defense \
+    --attack PAIR \
+    --attack_model lmsys/vicuna-13b-v1.5 \
+    --instructions_path ./data/harmful_bench_50.csv \
+    --save_result_path ./exp_results/main_vicuna/ \
+    --agent_evaluation \
+    --resume_exp \
+    --agent_recheck \
+    --exp_name main_vicuna_none_defense
+  ```
+- [TAP][R-TAP]
+  ```bash
+    python -u main.py \
+      --target_model_path lmsys/vicuna-13b-v1.5 \
+      --defense_type None_defense \
+      --attack TAP \
+      --attack_model lmsys/vicuna-13b-v1.5 \
+      --instructions_path ./data/harmful_bench_50.csv \
+      --save_result_path ./exp_results/main_vicuna/ \
+      --agent_evaluation \
+      --resume_exp \
+      --agent_recheck \
+      --exp_name main_vicuna_none_defense
+  ```
+
+- [GPTFuzz][R-GPTFuzz]
+  ```bash
+  python -u main.py \
+    --target_model_path lmsys/vicuna-13b-v1.5 \
+    --defense_type None_defense \
+    --attack GPTFuzz \
+    --instructions_path ./data/harmful_bench_50.csv \
+    --save_result_path ./exp_results/main_vicuna/ \
+    --agent_evaluation \
+    --resume_exp \
+    --agent_recheck
+  ```
+
+- [GCG][R-GCG]
+  ```bash
+  python -u main.py \
+    --target_model_path lmsys/vicuna-13b-v1.5 \
+    --defense_type None_defense \
+    --attack GCG \
+    --instructions_path ./data/harmful_bench_50.csv \
+    --save_result_path ./exp_results/main_vicuna/ \
+    --agent_evaluation \
+    --resume_exp \
+    --agent_recheck \
+    --exp_name main_vicuna_none_defense
+  ```
+
+- [AdvPrompter][R-AdvPrompter]
+  ```bash
+  python -u main.py \
+    --target_model_path lmsys/vicuna-13b-v1.5 \
+    --defense_type None_defense \
+    --attack AdvPrompter \
+    --instructions_path ./data/harmful_bench_50.csv \
+    --save_result_path ./exp_results/main_vicuna/ \
+    --agent_evaluation \
+    --resume_exp \
+    --agent_recheck \
+    --exp_name main_vicuna_none_defense \
+    --adv_prompter_model_path ./models/attack/advprompter_vicuna_7b
+  ```
+
+- [AmpleGCG][R-AmpleGCG]
+  ```bash
+  python -u main.py \
+    --target_model_path lmsys/vicuna-13b-v1.5 \
+    --defense_type None_defense \
+    --attack AmpleGCG \
+    --instructions_path ./data/harmful_bench_50.csv \
+    --save_result_path ./exp_results/main_vicuna/ \
+    --agent_evaluation \
+    --resume_exp \
+    --agent_recheck \
+    --exp_name main_vicuna_none_defense \
+    --attack_source vicuna
+  ```
+- [DrAttack][R-DrAttack]
+  ```bash
+  python -u main.py \
+    --target_model_path lmsys/vicuna-13b-v1.5 \
+    --defense_type None_defense \
+    --attack DrAttack \
+    --instructions_path ./data/harmful_bench_50.csv \
+    --save_result_path ./exp_results/main_vicuna/ \
+    --prompt_info_path ./baseline/DrAttack/dratk_data/attack_prompt_data/harmful_bench_test_info.json \
+    --agent_evaluation \
+    --resume_exp \
+    --agent_recheck \
+    --exp_name main_vicuna_none_defense
+  ```
+
+- [MultiJail][R-MultiJail]
+  ```bash
+  python -u main.py \
+    --target_model_path lmsys/vicuna-13b-v1.5 \
+    --defense_type None_defense \
+    --attack MultiJail \
+    --instructions_path ./baseline/MultiJail/multijail_data/1_MultiJail_en.csv \
+    --save_result_path ./exp_results/main_vicuna/ \
+    --agent_evaluation \
+    --resume_exp \
+    --agent_recheck \
+    --exp_name main_vicuna_none_defense
+  ```
+
+
+### 3.2 Defense Methods
+
+- No Defense
+- **Self Reminder: ** Defending chatgpt against jailbreak attack via self-reminders. (Nature Machine Intelligence, 2023) [Paper](https://www.nature.com/articles/s42256-023-00765-8)
+- **RPO: **Robust Prompt Optimization for Defending Language Models Against Jailbreaking Attacks. (SeTLLM@ICLR2024) [Paper](https://arxiv.org/abs/2401.17263)
+- SmoothLLM: Defending Large Language Models Against Jailbreaking Attacks. [Paper](https://arxiv.org/abs/2310.03684)
+- Unlearning: Large language model unlearning. (SoLaR@NeurIPS2023) [Paper](https://arxiv.org/pdf/2310.10683)
+- Adversarial Training
+- Safety Training
+
+## 4. Analysis
+
+Due to huge amount of experiments results, we provide a script to analyze the results.
+
+To analyze the results, you can use the `./analysis/report_trick.py` script. For example, you can run the following command to analyze the results of the main experiments:
+
+```bash
+python analysis/report_trick.py
+```
+
+## 5. Supported LLMs
+
+| Model                                                             | Model size                       |
+| ----------------------------------------------------------------- | -------------------------------- |
+| [Llama](https://github.com/facebookresearch/llama)                | 7B/13B/33B/65B                   |
+| [Llama 2](https://huggingface.co/meta-llama)                      | 7B/13B/70B                       |
+| [Llama 3/Llama 3.1](https://huggingface.co/meta-llama)            | 8B/70B                           |
+| [Mistral/Mixtral](https://huggingface.co/mistralai)               | 7B/8x7B/8x22B                    |
+| [Qwen/Qwen1.5/Qwen2](https://huggingface.co/Qwen)                 | 0.5B/1.5B/4B/7B/14B/32B/72B/110B |
+| [Vicuna](https://huggingface.co/lmsys)                            | 7B/13B                           |
+
+For model size larger than 13B/14B, we use 4 bit quantization to reduce the memory usage.
+
+## 6. Acknowledgement
+In the implementation of this project, we have referred to the code from the following repositories or papers:
+
+- Attack methods: GCG, AutoDAN, PAIR, TAP, GPTFuzz, AdvPrompter, AmpleGCG, DrAttack, MultiJail
+  - [GCG][R-GCG]
+  - [AutoDAN][R-AutoDAN]
+  - [PAIR][R-PAIR]
+  - [TAP][R-TAP]
+  - [GPTFuzz][R-GPTFuzz]
+  - [AdvPrompter][R-AdvPrompter]
+  - [AmpleGCG][R-AmpleGCG]
+  - [DrAttack][R-DrAttack]
+  - [MultiJail][R-MultiJail]
+- Defense methods: Self Reminder, RPO, SmoothLLM, Unlearning
+  - [Self Reminder][R-Self_Reminder]
+  - [RPO][R-RPO]
+  - [SmoothLLM][R-SmoothLLM]
+  - [Unlearning][R-Unlearning]
+
+[R-GCG]: https://github.com/llm-attacks/llm-attacks
+[R-AutoDAN]: https://github.com/SheltonLiu-N/AutoDAN
+[R-PAIR]: https://github.com/patrickrchao/JailbreakingLLMs
+[R-TAP]: https://github.com/RICommunity/TAP
+[R-GPTFuzz]: https://github.com/sherdencooper/GPTFuzz
+[R-AdvPrompter]: https://github.com/facebookresearch/advprompter
+[R-AmpleGCG]: https://github.com/OSU-NLP-Group/AmpleGCG
+[R-DrAttack]: https://github.com/xirui-li/DrAttack/tree/main
+[R-MultiJail]: https://github.com/DAMO-NLP-SG/multilingual-safety-for-LLMs
+[R-Self_Reminder]: https://www.nature.com/articles/s42256-023-00765-8
+[R-RPO]: https://github.com/lapisrocks/rpo
+[R-SmoothLLM]: https://github.com/arobey1/smooth-llm
+[R-Unlearning]: https://github.com/kevinyaobytedance/llm_unlearn

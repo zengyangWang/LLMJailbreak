@@ -1,0 +1,7 @@
+import enum
+
+
+class Language(enum.Enum):
+    ENGLISH = ("ENGLISH",)
+    CHINESE_SIMPLIFIED = ("CHINESE_SIMPLIFIED",)
+    CHINESE_TRADITIONAL = ("CHINESE_TRADITIONAL",)

@@ -1,0 +1,49 @@
+# # Auto detect text files and perform LF normalization
+# * text=auto
+.conda/
+.idea/
+.vscode/
+.DS_Store
+
+__pycache__/
+*.pyc
+*.pkl
+*.csv
+*.ipynb
+*.gz
+
+exp_results/*
+exp_logs/*
+wandb/
+# scripts/
+models/
+.history/
+llm_weights
+
+!.gitkeep
+!baseline/AutoDAN/assets/*
+!requirements.txt
+!baseline/MultiJail/multijail_data/*.csv
+# !./scripts/*
+data/SeedData*.xlsx
+data/seed_prompt*.xlsx
+logs/
+*.pid
+__pycache__/
+*.pyc
+*.log
+*.pid
+llm_weights/
+models/
+huggingface_cache/
+exp_logs/
+exp_results/
+memory_test_logs/
+logs/
+*.bak
+*.diagbak
+*.v1bak
+*.v5bak
+data/*response*.xlsx
+data/*evaluated.xlsx
+C:*
