@@ -17,6 +17,7 @@ import pandas as pd
 import json
 from tqdm import tqdm
 import random
+from functools import lru_cache
 from utils.test_utils import test_prefixes
 
 
@@ -122,6 +123,39 @@ def get_developer(model_name):
         "qwen-7b-chat": "Alibaba",
     }
     return developer_dict[model_name]
+
+
+@lru_cache(maxsize=8)
+def _load_autodan_template_bank(prompt_group_path, template_name):
+    """
+    Load and statically prepare an AutoDAN template bank once per
+    (template path, model template) combination.
+
+    [MODEL] and [KEEPER] are static for a given model template and can be
+    cached safely. [REPLACE] remains dynamic and is filled per goal later.
+    """
+    prompt_group_path = os.path.abspath(prompt_group_path)
+
+    try:
+        reference = torch.load(
+            prompt_group_path,
+            map_location="cpu",
+            weights_only=False,
+        )
+    except TypeError:
+        reference = torch.load(
+            prompt_group_path,
+            map_location="cpu",
+        )
+
+    processed_reference = tuple(
+        str(template)
+        .replace("[MODEL]", template_name.title())
+        .replace("[KEEPER]", get_developer(template_name))
+        for template in reference
+    )
+
+    return processed_reference
 
 
 class Args:
@@ -249,15 +283,12 @@ def AutoDAN_single_main(args_dict, target_model, target_tokenizer, goal, target,
     i = args.test_data_idx
     g = goal
     t = target
-    try:
-        reference = torch.load(
-            prompt_group_path, map_location="cpu", weights_only=False
+    reference = list(
+        _load_autodan_template_bank(
+            prompt_group_path,
+            template_name,
         )
-    except TypeError:
-         # 如果 PyTorch 版本较低，可能不支持 weights_only 参数
-        reference = torch.load(
-            prompt_group_path, map_location="cpu"
-        )
+    )
 
     user_prompt = g
     goal_filled_text = user_prompt.lower()
@@ -268,9 +299,6 @@ def AutoDAN_single_main(args_dict, target_model, target_tokenizer, goal, target,
         return raw_prompt
 
     target = t
-    for o in range(len(reference)):
-        reference[o] = reference[o].replace("[MODEL]", template_name.title())
-        reference[o] = reference[o].replace("[KEEPER]", get_developer(template_name))
     new_adv_suffixs = reference[:batch_size]
     # 确保读取的初始模板 adv_string_init 被加入到种群中
     if adv_string_init and len(adv_string_init) > 0:
