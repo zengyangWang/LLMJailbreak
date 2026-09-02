@@ -868,28 +868,38 @@ def get_score_autodan(
         input_ids_list.append(input_ids)
         target_slices.append(suffix_manager._target_slice)
 
-    # Pad all token ids to the max length
-    pad_tok = 0
-    for ids in input_ids_list:
-        while pad_tok in ids:
-            pad_tok += 1
+    # Pad all sequences to the longest sequence in one operation.  Do not
+    # search for a token ID on the GPU: ``pad_tok in ids`` causes repeated
+    # Python/GPU synchronization and is unnecessary when the mask is built
+    # from the original sequence lengths.
+    lengths = torch.tensor(
+        [ids.numel() for ids in input_ids_list],
+        device=device,
+        dtype=torch.long,
+    )
 
-    # Find the maximum length of input_ids in the list
-    max_input_length = max([ids.size(0) for ids in input_ids_list])
+    pad_tok = getattr(tokenizer, "pad_token_id", None)
+    if pad_tok is None:
+        pad_tok = getattr(tokenizer, "eos_token_id", None)
+    if pad_tok is None:
+        pad_tok = 0
 
-    # Pad each input_ids tensor to the maximum length
-    padded_input_ids_list = []
-    for ids in input_ids_list:
-        pad_length = max_input_length - ids.size(0)
-        padded_ids = torch.cat(
-            [ids, torch.full((pad_length,), pad_tok, device=device)], dim=0
-        )
-        padded_input_ids_list.append(padded_ids)
+    input_ids_tensor = torch.nn.utils.rnn.pad_sequence(
+        input_ids_list,
+        batch_first=True,
+        padding_value=pad_tok,
+    )
 
-    # Stack the padded input_ids tensors
-    input_ids_tensor = torch.stack(padded_input_ids_list, dim=0)
-
-    attn_mask = (input_ids_tensor != pad_tok).type(input_ids_tensor.dtype)
+    # Build the mask from true lengths instead of comparing token IDs.  This
+    # remains correct even when the chosen padding ID also occurs in a real
+    # sequence (for example, EOS is often used as LLaMA's padding ID).
+    positions = torch.arange(
+        input_ids_tensor.size(1),
+        device=device,
+    ).unsqueeze(0)
+    attn_mask = (
+        positions < lengths.unsqueeze(1)
+    ).to(dtype=input_ids_tensor.dtype)
 
     # Forward pass and compute loss
     logits = forward(
