@@ -264,7 +264,6 @@ def decode(model, tokenizer, device, x="", z="", constraints=None, args=None, sy
             last_lr = scheduler.get_last_lr()[0]
             # Clear intermediate tensors to save memory
             del loss, c_loss_1, c_loss_2, flu_loss, y_logits_t, xyz_logits, z_logits
-            torch.cuda.empty_cache()
         if args.verbose and ((iter + 1) % args.print_every == 0 or iter == 0 or iter + 1 == args.num_iters):
             text, _, last_text_ids = decode_with_model_topk(
                 model, y_logits_, args.topk, soft_forward_x, x_model_past, tokenizer, extra_mask=None, bad_mask=None)
