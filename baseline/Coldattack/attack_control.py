@@ -58,7 +58,7 @@ def attack_generation(model, tokenizer, device, args, model_back=None):
         print(f"{i} / {len(data)}")
 
         for _ in range(args.repeat_batch):
-            _, text, text_post, decoded_text, p_with_adv = decode(
+            _, text, text_post, decoded_text, p_with_adv, _ = decode(
                 model,
                 tokenizer,
                 device,
