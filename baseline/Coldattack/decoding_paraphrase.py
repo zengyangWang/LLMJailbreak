@@ -174,7 +174,9 @@ def decode(model, tokenizer, classifer, device, x="", z="", constraints=None, ar
     soft_forward_prefix = soft_forward_prefix.to(dtype=model_dtype).detach()
     y_logits = y_logits.to(dtype=model_dtype).detach()
 
+    executed_iterations = 0
     for iter in range(args.num_iters):
+        executed_iterations = iter + 1
         optim.zero_grad()
 
         y_logits_ = y_logits + epsilon
@@ -306,4 +308,4 @@ def decode(model, tokenizer, classifer, device, x="", z="", constraints=None, ar
 
     prompt_with_adv = [x + " " + t for t in text_post]
     
-    return ppl_last, text, text_post, decoded_text, prompt_with_adv
+    return ppl_last, text, text_post, decoded_text, prompt_with_adv, executed_iterations
