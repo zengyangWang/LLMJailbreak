@@ -392,7 +392,7 @@ def generate_attack_result(
     elif args.attack == "Coldattack":
         target_model, target_tokenizer = models[0], models[1]
         curr_args_dict = vars(args)
-        adv_prompts, model_outputs, iteration, is_JB = Coldattack_single_main(
+        adv_prompts, model_outputs, iteration, is_jb_list = Coldattack_single_main(
             args_dict=curr_args_dict,
             target_model=target_model,
             target_tokenizer=target_tokenizer,
@@ -404,12 +404,14 @@ def generate_attack_result(
         # candidate in the legacy scalar fields for downstream compatibility.
         curr_output["all_generated_prompts"] = adv_prompts
         curr_output["all_model_outputs"] = model_outputs
+        curr_output["all_is_JB"] = is_jb_list
         curr_output["adv_prompt"] = adv_prompts[0] if adv_prompts else goal
         curr_output["language_model_output"] = (
             model_outputs[0] if model_outputs else ""
         )
         curr_output["attack_iterations"] = iteration
-        curr_output["is_JB"] = is_JB
+        curr_output["is_JB"] = is_jb_list[0] if is_jb_list else False
+        curr_output["is_JB_any"] = any(is_jb_list)
     elif args.attack == "Template":
         target_model = models[0] if len(models) > 0 else None
         curr_args_dict = vars(args)
