@@ -599,6 +599,13 @@ def export_results_table(args, base_table, results):
         if isinstance(data_id, int) and 0 <= data_id < len(base_table):
             base_row = base_table.iloc[data_id].to_dict()
         # 取最终攻击 prompt
+        all_prompts = item.get("all_generated_prompts")
+        all_outputs = item.get("all_model_outputs")
+        has_paired_candidates = (
+            isinstance(all_prompts, list)
+            and bool(all_prompts)
+            and isinstance(all_outputs, list)
+        )
         prompt_field = None
         if "adv_prompt" in item and item["adv_prompt"] != "NULL":
             prompt_field = item["adv_prompt"]
@@ -608,11 +615,31 @@ def export_results_table(args, base_table, results):
             prompt_field = item["optimized_sentence"]
         else:
             prompt_field = ""
-        prompt_list = prompt_field if isinstance(prompt_field, list) else [prompt_field]
+        if has_paired_candidates:
+            prompt_list = all_prompts
+            output_list = all_outputs
+        else:
+            prompt_list = prompt_field if isinstance(prompt_field, list) else [prompt_field]
+            output_list = [item.get("language_model_output", "")] * len(prompt_list)
         # 模型输出字段
-        model_output_value = item.get("language_model_output", "")
-        evaluator_name, jb_result = _decide_evaluator_and_result(item, args)
-        for prompt in prompt_list:
+        agent_results = item.get("all_is_JB_Agent")
+        heuristic_results = item.get("all_is_JB")
+        all_reasons = item.get("all_reasons")
+        all_scores = item.get("all_scores")
+        for candidate_index, prompt in enumerate(prompt_list):
+            model_output_value = (
+                output_list[candidate_index]
+                if candidate_index < len(output_list)
+                else ""
+            )
+            if isinstance(agent_results, list) and candidate_index < len(agent_results):
+                evaluator_name = f"GenerativeEvaluator_{args.judge_model}"
+                jb_result = bool(agent_results[candidate_index])
+            elif isinstance(heuristic_results, list) and candidate_index < len(heuristic_results):
+                evaluator_name = "Heuristic_PrefixFilter"
+                jb_result = bool(heuristic_results[candidate_index])
+            else:
+                evaluator_name, jb_result = _decide_evaluator_and_result(item, args)
             new_row = dict(base_row)
             new_row.update(
                 {
@@ -625,6 +652,12 @@ def export_results_table(args, base_table, results):
                     "language_model_output": model_output_value,
                 }
             )
+            if has_paired_candidates:
+                new_row["candidate_index"] = candidate_index
+            if isinstance(all_reasons, list) and candidate_index < len(all_reasons):
+                new_row["reason"] = all_reasons[candidate_index]
+            if isinstance(all_scores, list) and candidate_index < len(all_scores):
+                new_row["score"] = all_scores[candidate_index]
             rows.append(new_row)
     new_df = pd.DataFrame(rows)
 
