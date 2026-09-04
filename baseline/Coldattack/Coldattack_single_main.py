@@ -74,6 +74,12 @@ def Coldattack_initial(args_dict, device):
     target_model, target_tokenizer = load_model_and_tokenizer(
         args_dict["target_model_path"], tokenizer_path=None, device=device
     )
+    # COLD optimizes the input perturbation (epsilon), not the target model.
+    # Frozen weights still participate in the differentiable forward pass, so
+    # gradients can flow through the model back to epsilon without allocating
+    # gradients for every model parameter.
+    target_model.eval()
+    target_model.requires_grad_(False)
     return target_model, target_tokenizer
 
 
@@ -154,8 +160,8 @@ def Coldattack_single_main(
 
     if error_msg or not prompt_with_adv:
         print(f"[Coldattack] decode failed or empty result, fallback to original. error={error_msg}")
-        return goal, error_msg if error_msg else "", 0, False
+        return [goal], [error_msg if error_msg else ""], 0, False
 
-    adv_prompt = prompt_with_adv[0] if prompt_with_adv else goal
-    model_output = decoded_text[0] if decoded_text else ""
-    return adv_prompt, model_output, iterations, False
+    # Keep every candidate produced by the decoding batch.  The caller may
+    # still expose the first item through the legacy scalar result fields.
+    return prompt_with_adv, decoded_text, iterations, False
